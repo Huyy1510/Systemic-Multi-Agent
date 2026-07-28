@@ -1,0 +1,33 @@
+# Environment & Secret files
+.env
+*.env
+
+# Specs & Planning docs (Excluded from public repo)
+implementation_plan.md
+Project spec multi agent research assistant.md
+
+# Temporary & Scratch files
+scratch/
+.system_generated/
+architecture_graph.mmd
+
+# Python & Virtual Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# SQLite Database
+*.db
+observability.db
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

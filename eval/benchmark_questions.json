@@ -1,0 +1,184 @@
+[
+  {
+    "id": "q01",
+    "question": "What are the core capabilities of Gemini 1.5 Pro compared to Gemini 1.5 Flash?",
+    "difficulty": "easy",
+    "category": "ai_models"
+  },
+  {
+    "id": "q02",
+    "question": "Explain the concept of Model Context Protocol (MCP) in AI agent architecture.",
+    "difficulty": "easy",
+    "category": "agent_architecture"
+  },
+  {
+    "id": "q03",
+    "question": "What is Retrieval-Augmented Generation (RAG) and why is it used?",
+    "difficulty": "easy",
+    "category": "rag"
+  },
+  {
+    "id": "q04",
+    "question": "What are the main differences between LangGraph and AutoGen framework?",
+    "difficulty": "easy",
+    "category": "frameworks"
+  },
+  {
+    "id": "q05",
+    "question": "Summarize the key features of Python 3.12 release.",
+    "difficulty": "easy",
+    "category": "software_engineering"
+  },
+  {
+    "id": "q06",
+    "question": "What is SQLite and when should developers use it?",
+    "difficulty": "easy",
+    "category": "databases"
+  },
+  {
+    "id": "q07",
+    "question": "What is the role of a Critic Agent in multi-agent self-reflection loops?",
+    "difficulty": "easy",
+    "category": "agent_architecture"
+  },
+  {
+    "id": "q08",
+    "question": "Explain the difference between vector database and relational database.",
+    "difficulty": "easy",
+    "category": "databases"
+  },
+  {
+    "id": "q09",
+    "question": "What are the advantages of Streamlit for AI dashboard building?",
+    "difficulty": "easy",
+    "category": "tooling"
+  },
+  {
+    "id": "q10",
+    "question": "What is Tavily search API and how does it optimize web search for LLMs?",
+    "difficulty": "easy",
+    "category": "search_tools"
+  },
+
+  {
+    "id": "q11",
+    "question": "Compare agentic AI adoption trends in 2026 between North America and Southeast Asia.",
+    "difficulty": "medium",
+    "category": "market_trends"
+  },
+  {
+    "id": "q12",
+    "question": "Analyze the trade-offs between local vector stores (ChromaDB) and cloud vector databases (Qdrant Cloud).",
+    "difficulty": "medium",
+    "category": "databases"
+  },
+  {
+    "id": "q13",
+    "question": "How do guardrails prevent runaway token costs in autonomous multi-agent systems?",
+    "difficulty": "medium",
+    "category": "safety_governance"
+  },
+  {
+    "id": "q14",
+    "question": "Compare Ragas metrics (Faithfulness, Answer Relevance, Context Recall) with agent trajectory metrics.",
+    "difficulty": "medium",
+    "category": "evaluation"
+  },
+  {
+    "id": "q15",
+    "question": "What are the security vulnerabilities associated with MCP tool-calling in enterprise applications?",
+    "difficulty": "medium",
+    "category": "security"
+  },
+  {
+    "id": "q16",
+    "question": "How does LangGraph implement state persistence and human-in-the-loop workflows?",
+    "difficulty": "medium",
+    "category": "frameworks"
+  },
+  {
+    "id": "q17",
+    "question": "Evaluate the impact of small language models (SLMs) on edge deployment in 2026.",
+    "difficulty": "medium",
+    "category": "ai_models"
+  },
+  {
+    "id": "q18",
+    "question": "Compare REST API tool calling vs MCP stdio transport in agentic systems.",
+    "difficulty": "medium",
+    "category": "agent_architecture"
+  },
+  {
+    "id": "q19",
+    "question": "What strategies effectively mitigate hallucinations in multi-step research agents?",
+    "difficulty": "medium",
+    "category": "reliability"
+  },
+  {
+    "id": "q20",
+    "question": "How can observability tools like Langfuse or SQLite logging improve prompt debugging?",
+    "difficulty": "medium",
+    "category": "observability"
+  },
+
+  {
+    "id": "q21",
+    "question": "Comprehensive comparative analysis of multi-agent orchestration frameworks (LangGraph, CrewAI, AutoGen, Swarm) for production deployment in 2026.",
+    "difficulty": "hard",
+    "category": "frameworks"
+  },
+  {
+    "id": "q22",
+    "question": "Design an enterprise-grade evaluation and observability architecture for multi-agent RAG systems operating under strict latency and token budgets.",
+    "difficulty": "hard",
+    "category": "architecture_design"
+  },
+  {
+    "id": "q23",
+    "question": "Analyze the economic and technical trade-offs of fine-tuning open-weight models vs prompting proprietary LLMs for specialized research tasks.",
+    "difficulty": "hard",
+    "category": "ai_strategy"
+  },
+  {
+    "id": "q24",
+    "question": "Investigate the failure modes of iterative self-reflection loops in LLM critics and proposed solutions in 2026 research.",
+    "difficulty": "hard",
+    "category": "research_analysis"
+  },
+  {
+    "id": "q25",
+    "question": "Compare zero-shot tool use capabilities across top LLM provider families (Google Gemini, OpenAI GPT-4o, Anthropic Claude 3.5).",
+    "difficulty": "hard",
+    "category": "ai_models"
+  },
+  {
+    "id": "q26",
+    "question": "How do state machines guarantee deterministic fallback recovery when web search tool-calls encounter rate limits or timeouts?",
+    "difficulty": "hard",
+    "category": "resilience"
+  },
+  {
+    "id": "q27",
+    "question": "Evaluate state-of-the-art methods for automatic citation verification and factual grounding in LLM-generated reports.",
+    "difficulty": "hard",
+    "category": "evaluation"
+  },
+  {
+    "id": "q28",
+    "question": "Deep dive into Model Context Protocol (MCP) server-client spec: schema validation, capabilities negotiation, and transport layer security.",
+    "difficulty": "hard",
+    "category": "agent_architecture"
+  },
+  {
+    "id": "q29",
+    "question": "Strategies for benchmark dataset curation and evaluation guardrails to prevent data leakage in LLM agent benchmarks.",
+    "difficulty": "hard",
+    "category": "evaluation"
+  },
+  {
+    "id": "q30",
+    "question": "Future outlook of autonomous AI research assistants in enterprise intelligence gathering from 2026 to 2030.",
+    "difficulty": "hard",
+    "category": "market_trends"
+  }
+]

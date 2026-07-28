@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: multi_agent_research_assistant
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./observability.db:/app/observability.db
+    restart: unless-stopped
