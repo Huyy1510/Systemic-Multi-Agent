@@ -1,19 +1,7 @@
-version: '3.8'
-
 services:
-  app:
-    build: .
-    container_name: multi_agent_research_assistant
-    ports:
-      - "8501:8501"
-    env_file:
-      - .env
-    depends_on:
-      - odoo
-    command: python -m streamlit run observability/dashboard.py --server.port 8501 --server.address 0.0.0.0
-
   odoo:
     image: odoo:17
+    container_name: odoo_erp
     ports:
       - "8069:8069"
     depends_on:
@@ -27,6 +15,7 @@ services:
 
   db:
     image: postgres:16
+    container_name: odoo_db
     environment:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=odoo

@@ -14,11 +14,19 @@ class SubQuestion(BaseModel):
     question: str = Field(description="Specific sub-question to research")
     priority: int = Field(description="Priority (1=highest, 5=lowest)")
     search_keywords: List[str] = Field(description="List of relevant search keywords")
+    data_source: str = Field(
+        default="web",
+        description=(
+            "Target data source: 'web' (internet search for external info/competitors/market), "
+            "'erp' (internal company database for sales, revenue, inventory stock, customer data), "
+            "or 'hybrid' (requires both internal ERP query AND web market context)"
+        ),
+    )
 
 
 class PlannerOutput(BaseModel):
     sub_questions: List[SubQuestion] = Field(
-        description="3 to 5 sub-questions prioritizing key aspects"
+        description="3 to 5 sub-questions prioritizing key aspects and data source routing"
     )
     reasoning: str = Field(description="Rationale for the sub-question breakdown")
 
@@ -40,12 +48,21 @@ class PlannerAgent:
         if not user_query:
             return {"error": "User query is empty", "sub_questions": []}
 
-        prompt = f"""You are an elite Research Planner.
-Analyze the following research query and break it down into 3 to 5 clear, searchable sub-questions.
+        prompt = f"""You are an elite Hybrid Research Planner.
+Analyze the following query and break it down into 3 to 5 clear sub-questions.
 Query: "{user_query}"
 
-Provide priority (1-5, where 1 is highest priority) and effective search keywords for each sub-question.
-Ensure the total number of sub-questions does not exceed {self.config.max_sub_questions}.
+You have access to two distinct data sources:
+1. "web" — Internet search for external market trends, industry news, competitor benchmarks.
+2. "erp" — Internal company database for sales revenue, order history, inventory stock, customer accounts.
+3. "hybrid" — Requires querying BOTH internal ERP database AND web market benchmarks.
+
+For each sub-question:
+- Provide priority (1-5, where 1 is highest priority).
+- Provide search keywords.
+- Classify `data_source` as "web", "erp", or "hybrid".
+
+Ensure total number of sub-questions does not exceed {self.config.max_sub_questions}.
 """
 
         try:
@@ -74,12 +91,12 @@ Ensure the total number of sub-questions does not exceed {self.config.max_sub_qu
             }
         except Exception as e:
             print(f"[PlannerAgent Error] {e}")
-            # Fallback if structured output fails
             fallback_sub_qs = [
                 {
                     "question": user_query,
                     "priority": 1,
                     "search_keywords": user_query.split(),
+                    "data_source": "web",
                 }
             ]
             return {

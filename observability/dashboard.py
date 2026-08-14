@@ -32,10 +32,23 @@ tab1, tab2 = st.tabs(["🔬 Research Workspace", "📊 Observability Dashboard"]
 # ==========================================
 with tab1:
     st.subheader("Start New Research Query")
+    
+    # Check Odoo ERP connection status
+    try:
+        from mcp_server.odoo_tools import check_odoo_connection
+        is_odoo_online = check_odoo_connection()
+    except Exception:
+        is_odoo_online = False
+
+    if is_odoo_online:
+        st.success("🏢 **Hybrid Mode Active**: Connected to Odoo ERP Database & Web Search Tools")
+    else:
+        st.info("🌐 **Web Only Mode**: Odoo ERP not connected (will default to web research)")
+
     query_input = st.text_input(
-        "Enter Research Topic or Question:",
-        value="Compare agentic AI trends in 2026 between the US and Vietnam",
-        placeholder="e.g. Compare LLM reasoning benchmarks in 2026",
+        "Enter Research Topic or Question (Web, ERP or Hybrid):",
+        value="Compare our laptop sales revenue from Odoo ERP with market trends in Vietnam",
+        placeholder="e.g. Compare our laptop sales revenue from Odoo ERP with market trends in Vietnam",
     )
 
     if st.button("🚀 Run Multi-Agent Research", type="primary"):

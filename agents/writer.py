@@ -32,7 +32,7 @@ class WriterAgent:
 
         # Build research summary text for prompt
         research_context_blocks: List[str] = []
-        all_sources: List[Dict[str, str]] = []
+        all_sources: List[Dict[str, Any]] = []
 
         source_counter = 1
         source_map: Dict[str, int] = {}
@@ -54,12 +54,16 @@ class WriterAgent:
             )
 
         research_context = "\n".join(research_context_blocks)
-        references_text = "\n".join(
-            [
-                f"[{i+1}] [{s.get('title', s['url'])}]({s['url']})"
-                for i, s in enumerate(all_sources)
-            ]
-        )
+        
+        references_blocks = []
+        for i, s in enumerate(all_sources):
+            stype = s.get("source_type", "web")
+            if stype == "erp":
+                references_blocks.append(f"[{i+1}] 🏢 **Internal ERP Data**: {s.get('title', s['url'])}")
+            else:
+                references_blocks.append(f"[{i+1}] 🌐 [{s.get('title', s['url'])}]({s['url']})")
+
+        references_text = "\n".join(references_blocks)
 
         feedback_instruction = ""
         if critic_feedback:
@@ -70,8 +74,8 @@ The previous draft received feedback from the reviewer. You MUST address these p
 Improve the draft specifically to address this feedback while maintaining clean structure and citations.
 """
 
-        prompt = f"""You are an Expert Technical Writer and Analyst.
-Synthesize the provided research findings into a comprehensive, professional Markdown research report answering:
+        prompt = f"""You are an Expert Hybrid Technical Writer and Business Analyst.
+Synthesize the provided research findings (combining internal company ERP data and external web market research) into a comprehensive, professional Markdown report answering:
 "{user_query}"
 
 {feedback_instruction}
@@ -86,14 +90,16 @@ Available Sources:
 
 Report Structure Requirements:
 1. # Title (descriptive and relevant)
-2. ## Executive Summary (concise high-level synthesis)
+2. ## Executive Summary (concise high-level synthesis contrasting internal performance vs external market trends)
 3. ## Detailed Findings (structured under clear subheadings addressing sub-questions)
-4. ## Conclusion & Key Takeaways
-5. ## References (list sources with markdown links)
+4. ## Strategic Recommendations & Key Takeaways
+5. ## References & Data Sources (clearly list web links and internal ERP sources)
 
 Guidelines:
+- Some research findings come from internal company ERP databases (sales, inventory, customers), while others come from web search.
 - Ensure all factual claims contain citations using [1], [2], etc. matching the reference list.
-- Maintain an objective, professional tone.
+- Clearly distinguish between internal performance numbers and external market trends.
+- Maintain an objective, executive-level professional tone.
 - Output clean, valid Markdown format.
 """
 

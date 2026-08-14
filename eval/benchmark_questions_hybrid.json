@@ -1,0 +1,82 @@
+[
+  {
+    "id": "h01",
+    "question": "Query our total sale orders and revenue in Odoo ERP",
+    "difficulty": "easy",
+    "expected_topics": ["sales", "revenue", "orders"],
+    "category": "erp_only",
+    "data_source": "erp"
+  },
+  {
+    "id": "h02",
+    "question": "What is our current product stock level in Odoo inventory?",
+    "difficulty": "easy",
+    "expected_topics": ["inventory", "stock"],
+    "category": "erp_only",
+    "data_source": "erp"
+  },
+  {
+    "id": "h03",
+    "question": "List our registered B2B customer contacts in Odoo ERP",
+    "difficulty": "easy",
+    "expected_topics": ["customers", "contacts"],
+    "category": "erp_only",
+    "data_source": "erp"
+  },
+  {
+    "id": "h04",
+    "question": "What are our top selling laptops in Odoo sales database?",
+    "difficulty": "easy",
+    "expected_topics": ["sales", "laptops"],
+    "category": "erp_only",
+    "data_source": "erp"
+  },
+  {
+    "id": "h05",
+    "question": "Compare our laptop sales revenue from Odoo ERP with external laptop market trends in Southeast Asia 2026",
+    "difficulty": "medium",
+    "expected_topics": ["internal sales data", "laptop market trends", "SEA"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  },
+  {
+    "id": "h06",
+    "question": "What is our current smartphone inventory stock in Odoo, and how does customer demand compare with global smartphone market share?",
+    "difficulty": "medium",
+    "expected_topics": ["inventory", "smartphone market share"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  },
+  {
+    "id": "h07",
+    "question": "Analyze our top customer accounts in Odoo ERP and recommend B2B tech procurement strategies based on industry trends",
+    "difficulty": "medium",
+    "expected_topics": ["top customers", "B2B procurement trends"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  },
+  {
+    "id": "h08",
+    "question": "Which electronics products in our Odoo inventory have high stock levels but low sales, and what are the market demand factors for these products in 2026?",
+    "difficulty": "hard",
+    "expected_topics": ["inventory", "sales correlation", "market demand"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  },
+  {
+    "id": "h09",
+    "question": "Evaluate our total quarterly revenue from Odoo ERP against industry benchmark growth rates for electronics retailers in Vietnam",
+    "difficulty": "hard",
+    "expected_topics": ["revenue", "industry benchmark", "Vietnam electronics retail"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  },
+  {
+    "id": "h10",
+    "question": "Synthesize our enterprise customer sales in Odoo ERP with Vietnam Law No. 134/2025 AI compliance regulations for tech hardware vendors",
+    "difficulty": "hard",
+    "expected_topics": ["enterprise sales", "AI law compliance", "Vietnam"],
+    "category": "hybrid",
+    "data_source": "hybrid"
+  }
+]

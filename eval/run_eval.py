@@ -11,8 +11,18 @@ from eval.metrics import calculate_all_metrics, generate_report
 from graph.workflow import run_research
 
 
-def run_benchmark(limit: int = 0, difficulty: str = "all"):
-    questions_file = os.path.join(os.path.dirname(__file__), "benchmark_questions.json")
+def run_benchmark(
+    limit: int = 0, difficulty: str = "all", benchmark_file: str = "benchmark_questions.json"
+):
+    questions_file = (
+        benchmark_file
+        if os.path.isabs(benchmark_file)
+        else os.path.join(os.path.dirname(__file__), benchmark_file)
+    )
+
+    if not os.path.exists(questions_file):
+        print(f"❌ Error: Benchmark file '{questions_file}' not found.")
+        return
 
     with open(questions_file, "r", encoding="utf-8") as f:
         questions = json.load(f)
@@ -23,7 +33,10 @@ def run_benchmark(limit: int = 0, difficulty: str = "all"):
     if limit > 0:
         questions = questions[:limit]
 
-    print(f"🚀 Starting Benchmark Evaluation on {len(questions)} questions (Difficulty: {difficulty})...\n")
+    print(
+        f"🚀 Starting Benchmark Evaluation using '{os.path.basename(questions_file)}' "
+        f"on {len(questions)} questions (Difficulty: {difficulty})...\n"
+    )
 
     for i, item in enumerate(questions, 1):
         q_id = item["id"]
@@ -79,6 +92,14 @@ if __name__ == "__main__":
         choices=["all", "easy", "medium", "hard"],
         help="Filter questions by difficulty",
     )
+    parser.add_argument(
+        "--file",
+        type=str,
+        default="benchmark_questions.json",
+        help="Benchmark questions JSON file name or path",
+    )
     args = parser.parse_args()
 
-    run_benchmark(limit=args.limit, difficulty=args.difficulty)
+    run_benchmark(
+        limit=args.limit, difficulty=args.difficulty, benchmark_file=args.file
+    )
