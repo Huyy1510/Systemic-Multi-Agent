@@ -7,10 +7,10 @@
 ## 🖼️ Application Screenshots & Demo
 
 ### 1. Interactive Chat Workspace (Product Advice & Odoo Catalog)
-![Chat Workspace Demo 1](assets/demo1.png)
+![Chat Workspace Demo 1](assets/Demo1.png)
 
 ### 2. Markdown Product Comparison & Live Inventory Status
-![Comparison & Inventory Demo 2](assets/demo2.png)
+![Comparison & Inventory Demo 2](assets/Demo2.png)
 
 ### 3. Observability Dashboard & Step Trajectory Traces
 ![Observability Dashboard Demo 3](assets/demo3.png)
