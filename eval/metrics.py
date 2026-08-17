@@ -1,68 +1,60 @@
-from typing import Any, Dict
-from observability.logger import DEFAULT_DB_PATH, get_connection
+from typing import Any, Dict, List
 
 
-def calculate_all_metrics(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
-    """Calculate agent-level metrics from SQLite run_summary and agent_logs."""
-    from observability.logger import init_db
-    init_db(db_path)
-
-    with get_connection(db_path) as conn:
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT COUNT(*) as total FROM run_summary")
-        total_runs = cursor.fetchone()["total"] or 0
-
-        if total_runs == 0:
-            return {
-                "total_runs": 0,
-                "passed_runs": 0,
-                "task_success_rate": 0.0,
-                "avg_revision_loops": 0.0,
-                "avg_tool_calls": 0.0,
-                "avg_quality_score": 0.0,
-            }
-
-        cursor.execute(
-            "SELECT COUNT(*) as passed FROM run_summary WHERE status = 'passed'"
-        )
-        passed_runs = cursor.fetchone()["passed"] or 0
-
-        cursor.execute(
-            """
-            SELECT 
-                AVG(revision_count) as avg_revisions,
-                AVG(total_tool_calls) as avg_tool_calls,
-                AVG(final_score) as avg_score
-            FROM run_summary
-        """
-        )
-        row = cursor.fetchone()
-
-        avg_revisions = round(row["avg_revisions"] or 0.0, 2)
-        avg_tool_calls = round(row["avg_tool_calls"] or 0.0, 2)
-        avg_score = round(row["avg_score"] or 0.0, 2)
-        success_rate = round((passed_runs / total_runs) * 100, 2)
-
+def calculate_chat_metrics(eval_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate chatbot evaluation metrics over benchmark test runs."""
+    total_runs = len(eval_results)
+    if total_runs == 0:
         return {
-            "total_runs": total_runs,
-            "passed_runs": passed_runs,
-            "task_success_rate": success_rate,
-            "avg_revision_loops": avg_revisions,
-            "avg_tool_calls": avg_tool_calls,
-            "avg_quality_score": avg_score,
+            "total_runs": 0,
+            "intent_accuracy": 0.0,
+            "guardrail_effectiveness": 0.0,
+            "passed_scenarios": 0,
+            "avg_latency_ms": 0.0,
         }
 
+    correct_intents = sum(1 for r in eval_results if r.get("intent_match", False))
+    intent_accuracy = round((correct_intents / total_runs) * 100, 2)
 
-def generate_report(metrics: Dict[str, Any]) -> str:
-    """Generate markdown table summary of evaluation metrics."""
-    return f"""# 📊 Agent Evaluation & Benchmark Metrics
+    off_topic_runs = [r for r in eval_results if r.get("expected_intent") == "off_topic"]
+    if off_topic_runs:
+        blocked_count = sum(1 for r in off_topic_runs if r.get("intent_match", False))
+        guardrail_effectiveness = round((blocked_count / len(off_topic_runs)) * 100, 2)
+    else:
+        guardrail_effectiveness = 100.0
 
-| Metric | Result | Target / Description |
-|---|---|---|
-| **Total Benchmark Runs** | `{metrics['total_runs']}` | Evaluated test cases |
-| **Task Success Rate** | `{metrics['task_success_rate']}%` | Target ≥ 80% pass threshold |
-| **Avg Quality Score** | `{metrics['avg_quality_score']}` | Scale 0.0 - 1.0 (Groundedness, Coverage, Coherence, Faithfulness) |
-| **Avg Revision Loops** | `{metrics['avg_revision_loops']}` | Self-reflection loops before passing |
-| **Avg Tool Calls / Task** | `{metrics['avg_tool_calls']}` | Search & fetch MCP tool calls used |
-"""
+    passed_scenarios = sum(1 for r in eval_results if r.get("passed", False))
+    avg_latency = round(sum(r.get("latency_ms", 0) for r in eval_results) / total_runs, 1)
+
+    return {
+        "total_runs": total_runs,
+        "intent_accuracy": intent_accuracy,
+        "guardrail_effectiveness": guardrail_effectiveness,
+        "passed_scenarios": passed_scenarios,
+        "avg_latency_ms": avg_latency,
+    }
+
+
+def generate_chat_report(metrics: Dict[str, Any], eval_results: List[Dict[str, Any]]) -> str:
+    """Generate Markdown report summarizing Chatbot Benchmark Evaluation results."""
+    md = []
+    md.append("# 📊 ERP Sales Chatbot Benchmark Report\n")
+    md.append("### Summary Metrics\n")
+    md.append(f"- **Total Test Scenarios**: `{metrics['total_runs']}`")
+    md.append(f"- **Intent Accuracy Rate**: `{metrics['intent_accuracy']}%` (Target ≥ 85%)")
+    md.append(f"- **Guardrail Effectiveness**: `{metrics['guardrail_effectiveness']}%` (Off-topic blocking)")
+    md.append(f"- **Average Turn Latency**: `{metrics['avg_latency_ms']} ms`")
+    md.append(f"- **Passed Scenarios**: `{metrics['passed_scenarios']} / {metrics['total_runs']}`\n")
+
+    md.append("### Scenario Results Breakdown\n")
+    md.append("| ID | User Message | Expected Intent | Detected Intent | Status | Latency |")
+    md.append("|---|---|---|---|---|---|")
+
+    for r in eval_results:
+        status_icon = "PASS ✅" if r.get("intent_match") else "FAIL ❌"
+        msg_snippet = (r['message'][:35] + "..") if len(r['message']) > 35 else r['message']
+        md.append(
+            f"| `{r['id']}` | {msg_snippet} | `{r['expected_intent']}` | `{r['detected_intent']}` | {status_icon} | {r['latency_ms']}ms |"
+        )
+
+    return "\n".join(md)

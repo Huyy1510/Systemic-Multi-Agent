@@ -147,13 +147,16 @@ def log_run_summary(
         conn.commit()
 
 
-def get_all_runs(db_path: str = DEFAULT_DB_PATH) -> List[Dict[str, Any]]:
+def get_all_runs(
+    limit: Optional[int] = None, db_path: str = DEFAULT_DB_PATH
+) -> List[Dict[str, Any]]:
     """Fetch summary of all runs ordered by start time descending."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM run_summary ORDER BY started_at DESC"
-        )
+        query = "SELECT * FROM run_summary ORDER BY started_at DESC"
+        if limit is not None:
+            query += f" LIMIT {int(limit)}"
+        cursor.execute(query)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 

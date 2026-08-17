@@ -1,253 +1,200 @@
+import json
 import time
 import uuid
-from datetime import datetime
-from typing import Any, Dict, Optional, Literal
+from typing import Any, Dict, List, Optional
+from langgraph.graph import END, START, StateGraph
 
-from langgraph.graph import StateGraph, START, END
-
-from agents.critic import CriticAgent
-from agents.planner import PlannerAgent
-from agents.researcher import ResearcherAgent
-from agents.writer import WriterAgent
-from graph.state import GraphState
+from agents.inventory_checker import InventoryCheckerAgent
+from agents.product_advisor import ProductAdvisorAgent
+from agents.restock_agent import RestockAgent
+from agents.router import RouterAgent
+from graph.state import ChatState
 from guardrails.limits import load_config
 from observability import init_db, log_run_summary, log_step
 
 
-def planner_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    step_idx = state.get("_step_index", 1)
+def router_node(state: ChatState) -> Dict[str, Any]:
+    """Node: Route intent and extract entities."""
     start_t = time.time()
+    agent = RouterAgent()
+    result = agent.run(state)
+    latency_ms = int((time.time() - start_t) * 1000)
 
-    planner = PlannerAgent()
-    result = planner.run(state)
-
-    latency = int((time.time() - start_t) * 1000)
     log_step(
-        run_id=run_id,
-        agent_name="planner",
-        step_index=step_idx,
-        status="success" if "error" not in result else "error",
-        latency_ms=latency,
-        error_message=result.get("error"),
+        run_id=state.get("run_id", "default"),
+        step_index=1,
+        agent_name="RouterAgent",
+        latency_ms=latency_ms,
+        tool_calls=0,
+        status="success",
+        metadata_json=json.dumps({"intent": result.get("intent"), "product_names": result.get("product_names")}),
     )
-    result["_step_index"] = step_idx + 1
     return result
 
 
-def researcher_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    step_idx = state.get("_step_index", 2)
+def product_advisor_node(state: ChatState) -> Dict[str, Any]:
+    """Node: Provide product recommendations or comparison table."""
     start_t = time.time()
+    agent = ProductAdvisorAgent()
+    result = agent.run(state)
+    latency_ms = int((time.time() - start_t) * 1000)
 
-    researcher = ResearcherAgent()
-    result = researcher.run(state)
-
-    latency = int((time.time() - start_t) * 1000)
-    total_tool_calls = sum(
-        item.get("tool_calls_used", 0)
-        for item in result.get("research_results", [])
-    )
     log_step(
-        run_id=run_id,
-        agent_name="researcher",
-        step_index=step_idx,
-        status="success" if "error" not in result else "error",
-        tool_calls=total_tool_calls,
-        latency_ms=latency,
-        error_message=result.get("error"),
+        run_id=state.get("run_id", "default"),
+        step_index=2,
+        agent_name="ProductAdvisorAgent",
+        latency_ms=latency_ms,
+        tool_calls=1,
+        status="success",
+        metadata_json=json.dumps({"intent": state.get("intent")}),
     )
-    result["_step_index"] = step_idx + 1
     return result
 
 
-def writer_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    step_idx = state.get("_step_index", 3)
+def inventory_checker_node(state: ChatState) -> Dict[str, Any]:
+    """Node: Check product stock in Odoo inventory."""
     start_t = time.time()
+    agent = InventoryCheckerAgent()
+    result = agent.run(state)
+    latency_ms = int((time.time() - start_t) * 1000)
 
-    writer = WriterAgent()
-    result = writer.run(state)
-
-    latency = int((time.time() - start_t) * 1000)
     log_step(
-        run_id=run_id,
-        agent_name="writer",
-        step_index=step_idx,
-        status="success" if "error" not in result else "error",
-        latency_ms=latency,
-        error_message=result.get("error"),
+        run_id=state.get("run_id", "default"),
+        step_index=2,
+        agent_name="InventoryCheckerAgent",
+        latency_ms=latency_ms,
+        tool_calls=1,
+        status="success",
+        metadata_json=json.dumps({"stock_status": result.get("stock_status")}),
     )
-    result["_step_index"] = step_idx + 1
     return result
 
 
-def critic_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    step_idx = state.get("_step_index", 4)
+def restock_node(state: ChatState) -> Dict[str, Any]:
+    """Node: Create draft Purchase Order on Odoo."""
     start_t = time.time()
-
-    critic = CriticAgent()
-    result = critic.run(state)
-
-    latency = int((time.time() - start_t) * 1000)
-    scores = result.get("critic_scores", {})
-    metadata = {
-        "scores": scores,
-        "feedback": result.get("critic_feedback", ""),
-        "passed": result.get("passed", False),
-    }
-
-    import json
+    agent = RestockAgent()
+    result = agent.run(state)
+    latency_ms = int((time.time() - start_t) * 1000)
 
     log_step(
-        run_id=run_id,
-        agent_name="critic",
-        step_index=step_idx,
-        status="success" if result.get("passed") else "rejected",
-        latency_ms=latency,
-        metadata_json=json.dumps(metadata),
+        run_id=state.get("run_id", "default"),
+        step_index=2,
+        agent_name="RestockAgent",
+        latency_ms=latency_ms,
+        tool_calls=1,
+        status="success",
+        metadata_json=json.dumps({"quantity": state.get("quantity")}),
     )
-    result["_step_index"] = step_idx + 1
     return result
 
 
-def route_critic(
-    state: GraphState,
-) -> Literal["finalize", "writer", "force_finalize"]:
-    passed = state.get("passed", False)
-    revision_count = state.get("revision_count", 0)
-    config = load_config()
+def guardrail_node(state: ChatState) -> Dict[str, Any]:
+    """Node: Block off-topic messages and provide guidance."""
+    start_t = time.time()
+    latency_ms = int((time.time() - start_t) * 1000)
+    response = (
+        "Dạ, tôi là Trợ lý Tư vấn Sản phẩm & Đơn hàng Odoo ERP. "
+        "Tôi chỉ hỗ trợ các thông tin về sản phẩm, giá bán, tồn kho và tạo yêu cầu nhập hàng. "
+        "Bạn cần tư vấn thông tin gì về sản phẩm ạ?"
+    )
 
-    if passed:
-        return "finalize"
-    elif revision_count < config.max_critic_loops:
-        return "writer"
+    log_step(
+        run_id=state.get("run_id", "default"),
+        step_index=2,
+        agent_name="GuardrailNode",
+        latency_ms=latency_ms,
+        tool_calls=0,
+        status="blocked",
+        metadata_json=json.dumps({"intent": "off_topic"}),
+    )
+    return {"response": response}
+
+
+def route_intent(state: ChatState) -> str:
+    """Conditional edge router based on intent classification."""
+    intent = state.get("intent", "off_topic")
+    if intent in ("product_inquiry", "product_comparison"):
+        return "product_advisor"
+    elif intent == "stock_check":
+        return "inventory_checker"
+    elif intent == "restock_request":
+        return "restock"
     else:
-        return "force_finalize"
-
-
-def finalize_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    draft = state.get("draft_report", "")
-    scores = state.get("critic_scores", {})
-    final_score = scores.get("average_score", 0.0)
-
-    started_at = state.get("_started_at", datetime.now().isoformat())
-    finished_at = datetime.now().isoformat()
-
-    import json
-
-    log_run_summary(
-        run_id=run_id,
-        query=state.get("user_query", ""),
-        started_at=started_at,
-        finished_at=finished_at,
-        status="passed",
-        revision_count=state.get("revision_count", 0),
-        final_score=final_score,
-        warnings=json.dumps(state.get("warnings", [])),
-        report_markdown=draft,
-    )
-    return {"final_report": draft}
-
-
-def force_finalize_node(state: GraphState) -> Dict[str, Any]:
-    run_id = state.get("run_id", "default-run")
-    draft = state.get("draft_report", "")
-    warnings = list(state.get("warnings", []))
-
-    warning_notice = (
-        "\n\n---\n> ⚠️ **Quality Warning**: This report reached the maximum allowed revision limit "
-        "and was finalized automatically. Manual review is recommended."
-    )
-    final_report = draft + warning_notice
-
-    scores = state.get("critic_scores", {})
-    final_score = scores.get("average_score", 0.0)
-
-    started_at = state.get("_started_at", datetime.now().isoformat())
-    finished_at = datetime.now().isoformat()
-
-    import json
-
-    warnings.append("Report force-finalized due to max critic revision limit.")
-
-    log_run_summary(
-        run_id=run_id,
-        query=state.get("user_query", ""),
-        started_at=started_at,
-        finished_at=finished_at,
-        status="passed_with_warnings",
-        revision_count=state.get("revision_count", 0),
-        final_score=final_score,
-        warnings=json.dumps(warnings),
-        report_markdown=final_report,
-    )
-    return {"final_report": final_report, "warnings": warnings}
+        return "guardrail"
 
 
 def build_graph():
-    """Build and compile the LangGraph workflow graph."""
-    builder = StateGraph(GraphState)
+    """Construct and compile the Chatbot StateGraph."""
+    builder = StateGraph(ChatState)
 
-    # Nodes
-    builder.add_node("planner", planner_node)
-    builder.add_node("researcher", researcher_node)
-    builder.add_node("writer", writer_node)
-    builder.add_node("critic", critic_node)
-    builder.add_node("finalize", finalize_node)
-    builder.add_node("force_finalize", force_finalize_node)
+    builder.add_node("router", router_node)
+    builder.add_node("product_advisor", product_advisor_node)
+    builder.add_node("inventory_checker", inventory_checker_node)
+    builder.add_node("restock", restock_node)
+    builder.add_node("guardrail", guardrail_node)
 
-    # Edges
-    builder.add_edge(START, "planner")
-    builder.add_edge("planner", "researcher")
-    builder.add_edge("researcher", "writer")
-    builder.add_edge("writer", "critic")
-
-    # Conditional Routing from Critic
+    builder.add_edge(START, "router")
     builder.add_conditional_edges(
-        "critic",
-        route_critic,
+        "router",
+        route_intent,
         {
-            "finalize": "finalize",
-            "writer": "writer",
-            "force_finalize": "force_finalize",
+            "product_advisor": "product_advisor",
+            "inventory_checker": "inventory_checker",
+            "restock": "restock",
+            "guardrail": "guardrail",
         },
     )
 
-    builder.add_edge("finalize", END)
-    builder.add_edge("force_finalize", END)
+    builder.add_edge("product_advisor", END)
+    builder.add_edge("inventory_checker", END)
+    builder.add_edge("restock", END)
+    builder.add_edge("guardrail", END)
 
     return builder.compile()
 
 
-def run_research(
-    query: str, run_id: Optional[str] = None
+def chat(
+    message: str,
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Convenience function to run the full research pipeline."""
+    """Execute one chat turn through the LangGraph state machine."""
     init_db()
-    actual_run_id = run_id or str(uuid.uuid4())
-    started_at = datetime.now().isoformat()
+    config = load_config()
+    run_id = run_id or f"chat-{uuid.uuid4().hex[:8]}"
+    chat_history = (chat_history or [])[-config.max_chat_history :]
 
     graph = build_graph()
-
-    initial_state = {
-        "user_query": query,
-        "run_id": actual_run_id,
-        "_started_at": started_at,
-        "_step_index": 1,
-        "sub_questions": [],
-        "research_results": [],
-        "draft_report": "",
-        "critic_scores": {},
-        "critic_feedback": "",
-        "passed": False,
-        "revision_count": 0,
-        "final_report": "",
-        "error": None,
+    initial_state: ChatState = {
+        "current_message": message,
+        "chat_history": chat_history,
+        "intent": "off_topic",
+        "product_names": [],
+        "quantity": None,
+        "stock_status": "unknown",
+        "out_of_stock_product": "",
+        "response": "",
+        "run_id": run_id,
         "warnings": [],
     }
 
+    from datetime import datetime
+    started_at = datetime.now().isoformat()
+    start_t = time.time()
     final_state = graph.invoke(initial_state)
+    finished_at = datetime.now().isoformat()
+
+    log_run_summary(
+        run_id=run_id,
+        query=message,
+        started_at=started_at,
+        finished_at=finished_at,
+        status="passed" if final_state.get("intent") != "off_topic" else "warning",
+        total_tool_calls=1 if final_state.get("intent") != "off_topic" else 0,
+        final_score=1.0 if final_state.get("intent") != "off_topic" else 0.5,
+        revision_count=0,
+        report_markdown=final_state.get("response", ""),
+    )
+
     return final_state

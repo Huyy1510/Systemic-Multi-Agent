@@ -1,16 +1,19 @@
 from .odoo_tools import (
+    OdooClient,
     check_odoo_connection,
+    create_purchase_order,
     query_customers,
     query_inventory,
+    query_products,
     query_sales,
 )
-from .search_tools import execute_web_fetch, execute_web_search
 
 __all__ = [
-    "execute_web_search",
-    "execute_web_fetch",
-    "query_sales",
+    "OdooClient",
+    "check_odoo_connection",
+    "query_products",
     "query_inventory",
     "query_customers",
-    "check_odoo_connection",
+    "query_sales",
+    "create_purchase_order",
 ]

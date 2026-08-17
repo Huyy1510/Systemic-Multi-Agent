@@ -4,16 +4,18 @@ import os
 import sys
 import time
 
+# Ensure UTF-8 stdout on Windows PowerShell
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from eval.metrics import calculate_all_metrics, generate_report
-from graph.workflow import run_research
+from eval.metrics import calculate_chat_metrics, generate_chat_report
+from graph.workflow import chat
 
 
-def run_benchmark(
-    limit: int = 0, difficulty: str = "all", benchmark_file: str = "benchmark_questions.json"
-):
+def run_benchmark(limit: int = 0, benchmark_file: str = "benchmark_questions.json"):
     questions_file = (
         benchmark_file
         if os.path.isabs(benchmark_file)
@@ -25,51 +27,74 @@ def run_benchmark(
         return
 
     with open(questions_file, "r", encoding="utf-8") as f:
-        questions = json.load(f)
-
-    if difficulty != "all":
-        questions = [q for q in questions if q.get("difficulty") == difficulty]
+        scenarios = json.load(f)
 
     if limit > 0:
-        questions = questions[:limit]
+        scenarios = scenarios[:limit]
 
     print(
-        f"🚀 Starting Benchmark Evaluation using '{os.path.basename(questions_file)}' "
-        f"on {len(questions)} questions (Difficulty: {difficulty})...\n"
+        f"🚀 Starting ERP Sales Chatbot Benchmark Evaluation on {len(scenarios)} scenarios...\n"
     )
 
-    for i, item in enumerate(questions, 1):
-        q_id = item["id"]
-        q_text = item["question"]
-        q_diff = item["difficulty"]
+    eval_results = []
 
-        print(f"[{i}/{len(questions)}] ({q_id} - {q_diff}) Researching: {q_text}")
+    for i, item in enumerate(scenarios, 1):
+        s_id = item["id"]
+        msg = item["message"]
+        exp_intent = item["expected_intent"]
+
+        print(f"[{i}/{len(scenarios)}] ({s_id}) Testing: \"{msg}\" (Expected: {exp_intent})")
         start_t = time.time()
 
         try:
-            state = run_research(q_text)
-            passed = state.get("passed", False)
-            scores = state.get("critic_scores", {})
-            avg_score = scores.get("average_score", 0.0)
-            rev_count = state.get("revision_count", 0)
-            elapsed = round(time.time() - start_t, 2)
+            state = chat(msg)
+            det_intent = state.get("intent", "off_topic")
+            response = state.get("response", "")
+            elapsed_ms = int((time.time() - start_t) * 1000)
 
-            status_str = "PASS ✅" if passed else "WARN ⚠️"
+            intent_match = (det_intent == exp_intent)
+            status_str = "PASS ✅" if intent_match else "FAIL ❌"
+
             print(
-                f"   -> Result: {status_str} | Score: {avg_score} | Revisions: {rev_count} | Latency: {elapsed}s\n"
+                f"   -> Result: {status_str} | Detected: {det_intent} | Latency: {elapsed_ms}ms\n"
             )
-        except Exception as e:
-            print(f"   -> Error running question {q_id}: {e}\n")
 
-        # Sleep briefly between queries to manage rate limits
+            eval_results.append(
+                {
+                    "id": s_id,
+                    "message": msg,
+                    "expected_intent": exp_intent,
+                    "detected_intent": det_intent,
+                    "intent_match": intent_match,
+                    "passed": intent_match,
+                    "response": response,
+                    "latency_ms": elapsed_ms,
+                }
+            )
+
+        except Exception as e:
+            print(f"   -> Error running scenario {s_id}: {e}\n")
+            eval_results.append(
+                {
+                    "id": s_id,
+                    "message": msg,
+                    "expected_intent": exp_intent,
+                    "detected_intent": "error",
+                    "intent_match": False,
+                    "passed": False,
+                    "response": f"Error: {e}",
+                    "latency_ms": int((time.time() - start_t) * 1000),
+                }
+            )
+
         time.sleep(1)
 
     print("=" * 60)
-    print("📊 BENCHMARK COMPLETE - CALCULATING METRICS")
+    print("📊 BENCHMARK EVALUATION COMPLETE")
     print("=" * 60)
 
-    metrics = calculate_all_metrics()
-    report_md = generate_report(metrics)
+    metrics = calculate_chat_metrics(eval_results)
+    report_md = generate_chat_report(metrics, eval_results)
     print(report_md)
 
     # Save benchmark report markdown
@@ -77,29 +102,20 @@ def run_benchmark(
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_md)
 
-    print(f"Report saved to: {report_path}")
+    print(f"\nReport saved to: {report_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Multi-Agent Research Benchmark Evaluation")
+    parser = argparse.ArgumentParser(description="Run ERP Sales Chatbot Benchmark Evaluation")
     parser.add_argument(
-        "--limit", type=int, default=0, help="Limit number of benchmark questions to run"
-    )
-    parser.add_argument(
-        "--difficulty",
-        type=str,
-        default="all",
-        choices=["all", "easy", "medium", "hard"],
-        help="Filter questions by difficulty",
+        "--limit", type=int, default=0, help="Limit number of benchmark scenarios to run"
     )
     parser.add_argument(
         "--file",
         type=str,
         default="benchmark_questions.json",
-        help="Benchmark questions JSON file name or path",
+        help="Benchmark scenarios JSON file name or path",
     )
     args = parser.parse_args()
 
-    run_benchmark(
-        limit=args.limit, difficulty=args.difficulty, benchmark_file=args.file
-    )
+    run_benchmark(limit=args.limit, benchmark_file=args.file)

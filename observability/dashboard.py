@@ -7,192 +7,156 @@ import streamlit as st
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from graph.workflow import run_research
-from observability.logger import get_all_runs, get_run_details, get_stats, init_db
-from utils import clean_llm_text
+from graph import chat
+from mcp_server.odoo_tools import check_odoo_connection
+from observability.logger import get_all_runs, get_run_details, init_db
 
 st.set_page_config(
-    page_title="Multi-Agent Research Assistant",
+    page_title="ERP Sales Chatbot Assistant",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 init_db()
 
-st.title("🤖 Multi-Agent Research & Report Assistant")
-st.caption(
-    "Automated Research, Synthesis, Self-Reflection Loop & Observability Dashboard"
-)
+st.title("🤖 Odoo ERP Sales & Inventory Chatbot")
+st.caption("Multi-Agent Sales Consultant, Inventory Tracker & Purchase Order Automation")
 
-tab1, tab2 = st.tabs(["🔬 Research Workspace", "📊 Observability Dashboard"])
+tab1, tab2 = st.tabs(["💬 Chat Workspace", "📊 Observability Dashboard"])
 
 # ==========================================
-# TAB 1: RESEARCH WORKSPACE
+# TAB 1: CHAT WORKSPACE
 # ==========================================
 with tab1:
-    st.subheader("Start New Research Query")
-    
-    # Check Odoo ERP connection status
-    try:
-        from mcp_server.odoo_tools import check_odoo_connection
+    col_chat, col_sidebar = st.columns([3, 1])
+
+    with col_sidebar:
+        st.subheader("⚙️ System Status")
         is_odoo_online = check_odoo_connection()
-    except Exception:
-        is_odoo_online = False
 
-    if is_odoo_online:
-        st.success("🏢 **Hybrid Mode Active**: Connected to Odoo ERP Database & Web Search Tools")
-    else:
-        st.info("🌐 **Web Only Mode**: Odoo ERP not connected (will default to web research)")
-
-    query_input = st.text_input(
-        "Enter Research Topic or Question (Web, ERP or Hybrid):",
-        value="Compare our laptop sales revenue from Odoo ERP with market trends in Vietnam",
-        placeholder="e.g. Compare our laptop sales revenue from Odoo ERP with market trends in Vietnam",
-    )
-
-    if st.button("🚀 Run Multi-Agent Research", type="primary"):
-        if not query_input.strip():
-            st.warning("Please enter a research question.")
+        if is_odoo_online:
+            st.success("🏢 **Odoo ERP Connected**\n\nLive XML-RPC Connection Active")
         else:
-            with st.status(
-                "Running Multi-Agent Workflow...", expanded=True
-            ) as status:
-                st.write("1️⃣ **Planner**: Generating structured sub-questions...")
-                start_time = pd.Timestamp.now()
+            st.warning("⚠️ **Odoo ERP Offline**\n\nServer unreachable at http://localhost:8069")
 
-                final_state = run_research(query_input)
+        st.divider()
+        st.subheader("🔍 Active Session Info")
 
-                st.write("2️⃣ **Researcher**: Web searching & extracting sources...")
-                st.write("3️⃣ **Writer**: Drafting comprehensive markdown report...")
-                st.write(
-                    "4️⃣ **Critic**: Chấm điểm 4 tiêu chuẩn quality (Groundedness, Coverage, Coherence, Faithfulness)..."
-                )
+        if "last_intent" in st.session_state:
+            st.info(f"**Intent Detected:**\n`{st.session_state.last_intent}`")
+        if "last_products" in st.session_state and st.session_state.last_products:
+            st.write(f"**Products Extracted:**\n{', '.join(st.session_state.last_products)}")
+        if "last_stock_status" in st.session_state and st.session_state.last_stock_status:
+            st.write(f"**Stock Status:**\n`{st.session_state.last_stock_status}`")
 
-                if final_state.get("passed"):
-                    status.update(
-                        label="✅ Research Completed & Passed Quality Checks!",
-                        state="complete",
-                    )
-                else:
-                    status.update(
-                        label="⚠️ Completed with Warnings / Revisions",
-                        state="complete",
-                    )
+        if st.button("🗑️ Clear Chat History"):
+            st.session_state.chat_history = []
+            st.session_state.pop("last_intent", None)
+            st.session_state.pop("last_products", None)
+            st.session_state.pop("last_stock_status", None)
+            st.rerun()
 
-            st.divider()
+    with col_chat:
+        st.subheader("Chat with Sales Assistant")
 
-            # Display Results
-            col_main, col_side = st.columns([3, 1])
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Xin chào! Tôi là Trợ lý Tư vấn Bán hàng & Quản lý Kho Odoo ERP. "
+                        "Tôi có thể giúp bạn tìm kiếm laptop, so sánh sản phẩm, kiểm tra tồn kho và tạo yêu cầu nhập hàng. "
+                        "Bạn cần hỗ trợ gì hôm nay?"
+                    ),
+                }
+            ]
 
-            with col_main:
-                st.subheader("📄 Generated Research Report")
-                final_report = clean_llm_text(final_state.get("final_report", ""))
-                st.markdown(final_report)
+        # Render chat messages
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-                st.download_button(
-                    label="📥 Download Report (.md)",
-                    data=final_report,
-                    file_name="research_report.md",
-                    mime="text/markdown",
-                )
+        # Input box
+        if prompt := st.chat_input("Nhập yêu cầu (ví dụ: 'Tư vấn laptop 20 triệu', 'So sánh Dell XPS với Mac Air', 'Đặt 30 ThinkPad X1')..."):
+            # Display user message
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-            with col_side:
-                st.subheader("🔍 Execution Summary")
-                scores = final_state.get("critic_scores", {})
-                st.metric("Overall Score", f"{scores.get('average_score', 0.0):.2f}")
-                st.metric(
-                    "Revision Loops",
-                    f"{final_state.get('revision_count', 0)} / 3",
-                )
+            # Generate response via graph.chat
+            with st.chat_message("assistant"):
+                with st.spinner("🤖 Đang kiểm tra Odoo ERP & phân tích..."):
+                    history_payload = [
+                        {"role": m["role"], "content": m["content"]}
+                        for m in st.session_state.chat_history[:-1]
+                    ]
+                    result = chat(message=prompt, chat_history=history_payload)
+                    bot_response = result.get("response", "Dạ, tôi chưa nhận được phản hồi.")
 
-                st.markdown("**Metric Breakdown:**")
-                st.progress(
-                    scores.get("groundedness", 0.0),
-                    text=f"Groundedness: {scores.get('groundedness', 0.0):.2f}",
-                )
-                st.progress(
-                    scores.get("coverage", 0.0),
-                    text=f"Coverage: {scores.get('coverage', 0.0):.2f}",
-                )
-                st.progress(
-                    scores.get("coherence", 0.0),
-                    text=f"Coherence: {scores.get('coherence', 0.0):.2f}",
-                )
-                st.progress(
-                    scores.get("faithfulness", 0.0),
-                    text=f"Faithfulness: {scores.get('faithfulness', 0.0):.2f}",
-                )
+                    st.markdown(bot_response)
 
-                warnings = final_state.get("warnings", [])
-                if warnings:
-                    st.warning("**Warnings:**\n" + "\n".join([f"- {w}" for w in warnings]))
+                    # Update sidebar metadata in session_state
+                    st.session_state.last_intent = result.get("intent", "N/A")
+                    st.session_state.last_products = result.get("product_names", [])
+                    st.session_state.last_stock_status = result.get("stock_status", "N/A")
+
+            # Append bot response to history
+            st.session_state.chat_history.append({"role": "assistant", "content": bot_response})
+            st.rerun()
 
 # ==========================================
 # TAB 2: OBSERVABILITY DASHBOARD
 # ==========================================
 with tab2:
-    st.subheader("📈 System Observability & Execution Analytics")
+    st.subheader("📊 Multi-Agent System Analytics")
 
-    stats = get_stats()
-
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Total Tasks Run", stats["total_runs"])
-    m2.metric("Pass Rate", f"{stats['pass_rate']}%")
-    m3.metric("Avg Score", stats["avg_score"])
-    m4.metric("Avg Revisions", stats["avg_revisions"])
-    m5.metric("Avg Tool Calls", stats["avg_tool_calls_per_run"])
-
-    st.divider()
-
-    runs_data = get_all_runs()
-    if not runs_data:
-        st.info("No research runs logged yet. Execute a research query to see analytics.")
+    runs = get_all_runs(limit=100)
+    if not runs:
+        st.info("No chat logs recorded in SQLite database yet.")
     else:
-        df_runs = pd.DataFrame(runs_data)
+        df_runs = pd.DataFrame(runs)
 
-        st.subheader("📜 Run History")
+        # Metrics overview
+        total_chats = len(df_runs)
+        passed_chats = len(df_runs[df_runs["status"] == "passed"])
+        pass_rate = round((passed_chats / total_chats) * 100, 1) if total_chats > 0 else 0.0
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total User Turn Executions", total_chats)
+        col2.metric("On-Topic Success Rate", f"{pass_rate}%")
+        col3.metric("SQLite DB File", "observability.db")
+
+        st.divider()
+
+        display_cols = [c for c in ["run_id", "started_at", "query", "status", "total_tool_calls"] if c in df_runs.columns]
         st.dataframe(
-            df_runs[
-                [
-                    "run_id",
-                    "started_at",
-                    "status",
-                    "final_score",
-                    "revision_count",
-                    "total_tool_calls",
-                    "query",
-                ]
-            ],
+            df_runs[display_cols],
             use_container_width=True,
         )
 
-        # Inspect specific run details
-        st.subheader("🔎 Inspect Run Step Trace")
+        st.divider()
+
+        st.subheader("🔍 Inspect Step Trajectory Trace")
         selected_run_id = st.selectbox(
-            "Select Run ID to view step-by-step trace:",
+            "Select Run ID to Inspect:",
             options=df_runs["run_id"].tolist(),
         )
 
         if selected_run_id:
             steps = get_run_details(selected_run_id)
-            if steps:
-                df_steps = pd.DataFrame(steps)
-                st.table(
-                    df_steps[
-                        [
-                            "step_index",
-                            "agent_name",
-                            "status",
-                            "latency_ms",
-                            "tool_calls",
-                            "timestamp",
-                        ]
-                    ]
-                )
+            if not steps:
+                st.info("No step trajectory details found for this run.")
+            else:
+                for step in steps:
+                    agent_name = step.get("agent_name", "Agent")
+                    status = step.get("status", "success")
+                    latency = step.get("latency_ms", 0)
 
-                # Show metadata json if present
-                with st.expander("Show detailed step metadata"):
-                    for step in steps:
-                        if step.get("metadata_json"):
-                            st.json(json.loads(step["metadata_json"]))
+                    with st.expander(
+                        f"Step {step.get('step_number')}: {agent_name} | Latency: {latency}ms | Status: {status}"
+                    ):
+                        meta = step.get("metadata_json", "{}")
+                        try:
+                            st.json(json.loads(meta))
+                        except Exception:
+                            st.text(meta)
