@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from graph.state import ChatState
+from integrations import send_slack_notification
 from mcp_server.odoo_tools import create_sale_order, query_inventory, query_products
 from utils import clean_llm_text
 
@@ -77,12 +78,24 @@ class ProductAdvisorAgent:
             so_res = create_sale_order(product_name=prod_name, quantity=qty, customer_name="Khách Hàng Retail")
             if so_res.get("success"):
                 so_code = so_res.get("order_name", "SO-DRAFT")
+
+                # Send Slack notification to sales team
+                send_slack_notification(
+                    order_code=so_code,
+                    order_type="sale_order",
+                    product_name=prod_name,
+                    quantity=qty,
+                    status="Draft (Chờ nhân viên sales duyệt)",
+                )
+
                 response = (
                     f"🛒 **Đã tạo thành công Đơn Bán Hàng (Draft Sale Order)!**\n\n"
                     f"- **Sản phẩm**: {prod_name}\n"
                     f"- **Số lượng mua**: {qty} cái\n"
                     f"- **Mã đơn hàng Odoo**: `{so_code}`\n"
                     f"- **Trạng thái**: ⏳ **Bản thảo (Chờ nhân viên duyệt xuất kho)**\n\n"
+                    f"💬 *Đã bắn thông báo nhắc nhở nhân viên Sales trên kênh Slack!*"
+                )
                     f"ℹ️ *Đơn hàng bán đã được lưu trên Odoo tại menu `Sales -> Orders`. Nhân viên bán hàng chỉ cần kiểm tra và bấm 'Confirm Order' để xuất kho cho bạn.*"
                 )
                 return {

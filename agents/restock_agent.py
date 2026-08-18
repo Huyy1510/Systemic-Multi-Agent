@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 from graph.state import ChatState
 from guardrails.limits import load_config
+from integrations import send_slack_notification
 from mcp_server.odoo_tools import create_purchase_order
 
 load_dotenv()
@@ -38,6 +39,16 @@ class RestockAgent:
 
         if res.get("success"):
             order_name = res.get("order_name", "PO-DRAFT")
+
+            # Send Slack notification to warehouse/procurement team
+            send_slack_notification(
+                order_code=order_name,
+                order_type="purchase_order",
+                product_name=target_product,
+                quantity=restock_qty,
+                status="Draft (Chờ nhân viên kho duyệt)",
+            )
+
             # If triggered via explicit user request
             response = (
                 f"✅ **[Procurement Agent] Đã tạo thành công Yêu cầu Nhập hàng (Draft Purchase Order)!**\n\n"
@@ -45,6 +56,7 @@ class RestockAgent:
                 f"- **Số lượng lô nhập**: {restock_qty} đơn vị\n"
                 f"- **Mã đơn mua hàng Odoo**: `{order_name}`\n"
                 f"- **Trạng thái**: ⏳ **Draft (Chờ nhân viên kho kiểm tra & duyệt)**\n\n"
+                f"💬 *Đã bắn thông báo nhắc nhở nhân viên Kho/Procurement trên kênh Slack!*\n\n"
                 f"ℹ️ *Đơn hàng nhập đã được chuyển lên Odoo tại menu `Purchase -> Orders`. Quản lý kho chỉ cần bấm 'Confirm Order' để xác nhận đặt hàng với Nhà cung cấp.*"
             )
             return {
