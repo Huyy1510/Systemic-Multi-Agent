@@ -95,7 +95,6 @@ class ProductAdvisorAgent:
                     f"- **Mã đơn hàng Odoo**: `{so_code}`\n"
                     f"- **Trạng thái**: ⏳ **Bản thảo (Chờ nhân viên duyệt xuất kho)**\n\n"
                     f"💬 *Đã bắn thông báo nhắc nhở nhân viên Sales trên kênh Slack!*"
-                )
                     f"ℹ️ *Đơn hàng bán đã được lưu trên Odoo tại menu `Sales -> Orders`. Nhân viên bán hàng chỉ cần kiểm tra và bấm 'Confirm Order' để xuất kho cho bạn.*"
                 )
                 return {
