@@ -3,6 +3,10 @@ import sys
 import xmlrpc.client
 from dotenv import load_dotenv
 
+# Ensure UTF-8 stdout on Windows PowerShell
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from mcp_server.odoo_tools import OdooClient
 

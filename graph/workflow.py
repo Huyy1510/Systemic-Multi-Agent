@@ -33,7 +33,7 @@ def router_node(state: ChatState) -> Dict[str, Any]:
 
 
 def product_advisor_node(state: ChatState) -> Dict[str, Any]:
-    """Node: Provide product recommendations or comparison table."""
+    """Node (Sale Agent): Provide product recommendations, comparison tables, or customer Sale Orders."""
     start_t = time.time()
     agent = ProductAdvisorAgent()
     result = agent.run(state)
@@ -42,11 +42,17 @@ def product_advisor_node(state: ChatState) -> Dict[str, Any]:
     log_step(
         run_id=state.get("run_id", "default"),
         step_index=2,
-        agent_name="ProductAdvisorAgent",
+        agent_name="ProductAdvisorAgent (Sale Agent)",
         latency_ms=latency_ms,
         tool_calls=1,
         status="success",
-        metadata_json=json.dumps({"intent": state.get("intent")}),
+        metadata_json=json.dumps(
+            {
+                "intent": state.get("intent"),
+                "needs_restock_signal": result.get("needs_restock_signal", False),
+                "sale_order_created": result.get("sale_order_created"),
+            }
+        ),
     )
     return result
 
@@ -65,28 +71,46 @@ def inventory_checker_node(state: ChatState) -> Dict[str, Any]:
         latency_ms=latency_ms,
         tool_calls=1,
         status="success",
-        metadata_json=json.dumps({"stock_status": result.get("stock_status")}),
+        metadata_json=json.dumps(
+            {
+                "stock_status": result.get("stock_status"),
+                "needs_restock_signal": result.get("needs_restock_signal", False),
+            }
+        ),
     )
     return result
 
 
 def restock_node(state: ChatState) -> Dict[str, Any]:
-    """Node: Create draft Purchase Order on Odoo."""
+    """Node (Procurement Agent): Receive restock signal and create Draft Purchase Order (purchase.order) on Odoo."""
     start_t = time.time()
     agent = RestockAgent()
     result = agent.run(state)
     latency_ms = int((time.time() - start_t) * 1000)
 
+    # Append Procurement Agent's status update to state response
+    current_resp = state.get("response", "")
+    proc_resp = result.get("response", "")
+
+    if current_resp and proc_resp:
+        combined_response = f"{current_resp}\n\n---\n{proc_resp}"
+    else:
+        combined_response = proc_resp or current_resp
+
     log_step(
         run_id=state.get("run_id", "default"),
-        step_index=2,
-        agent_name="RestockAgent",
+        step_index=3 if state.get("needs_restock_signal") else 2,
+        agent_name="RestockAgent (Procurement Agent)",
         latency_ms=latency_ms,
         tool_calls=1,
         status="success",
-        metadata_json=json.dumps({"quantity": state.get("quantity")}),
+        metadata_json=json.dumps({"po_created": result.get("restock_po_created")}),
     )
-    return result
+
+    return {
+        "response": combined_response,
+        "restock_po_created": result.get("restock_po_created"),
+    }
 
 
 def guardrail_node(state: ChatState) -> Dict[str, Any]:
@@ -94,9 +118,9 @@ def guardrail_node(state: ChatState) -> Dict[str, Any]:
     start_t = time.time()
     latency_ms = int((time.time() - start_t) * 1000)
     response = (
-        "Dạ, tôi là Trợ lý Tư vấn Sản phẩm & Đơn hàng Odoo ERP. "
-        "Tôi chỉ hỗ trợ các thông tin về sản phẩm, giá bán, tồn kho và tạo yêu cầu nhập hàng. "
-        "Bạn cần tư vấn thông tin gì về sản phẩm ạ?"
+        "Dạ, tôi là Trợ lý Bán hàng & Tư vấn Odoo ERP. "
+        "Tôi chỉ hỗ trợ các thông tin về sản phẩm, giá bán, tồn kho và lên đơn hàng. "
+        "Bạn cần tư vấn sản phẩm nào ạ?"
     )
 
     log_step(
@@ -124,8 +148,15 @@ def route_intent(state: ChatState) -> str:
         return "guardrail"
 
 
+def route_restock_signal(state: ChatState) -> str:
+    """Conditional edge: Route to ProcurementAgent if restock signal was raised by SaleAgent / StockChecker."""
+    if state.get("needs_restock_signal", False):
+        return "restock"
+    return END
+
+
 def build_graph():
-    """Construct and compile the Chatbot StateGraph."""
+    """Construct and compile the Chatbot StateGraph with SaleAgent ➔ ProcurementAgent handoff."""
     builder = StateGraph(ChatState)
 
     builder.add_node("router", router_node)
@@ -146,8 +177,25 @@ def build_graph():
         },
     )
 
-    builder.add_edge("product_advisor", END)
-    builder.add_edge("inventory_checker", END)
+    # Chaining: product_advisor & inventory_checker can trigger ProcurementAgent if item is out of stock
+    builder.add_conditional_edges(
+        "product_advisor",
+        route_restock_signal,
+        {
+            "restock": "restock",
+            END: END,
+        },
+    )
+
+    builder.add_conditional_edges(
+        "inventory_checker",
+        route_restock_signal,
+        {
+            "restock": "restock",
+            END: END,
+        },
+    )
+
     builder.add_edge("restock", END)
     builder.add_edge("guardrail", END)
 
@@ -174,12 +222,16 @@ def chat(
         "quantity": None,
         "stock_status": "unknown",
         "out_of_stock_product": "",
+        "needs_restock_signal": False,
+        "restock_po_created": None,
+        "sale_order_created": None,
         "response": "",
         "run_id": run_id,
         "warnings": [],
     }
 
     from datetime import datetime
+
     started_at = datetime.now().isoformat()
     start_t = time.time()
     final_state = graph.invoke(initial_state)

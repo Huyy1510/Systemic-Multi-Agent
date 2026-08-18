@@ -211,6 +211,57 @@ def query_sales(limit: int = 10) -> str:
         return json.dumps([{"error": str(e)}], ensure_ascii=False)
 
 
+def _find_product_id(client: OdooClient, product_name: str):
+    """Robust product lookup searching product.template and product.product across full string and tokens."""
+    # 1. Try full name search on product.template
+    templates = client.execute_kw(
+        "product.template",
+        "search_read",
+        [[("name", "ilike", product_name)]],
+        {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
+    )
+
+    # 2. If not found, try first token (e.g. "Dell" from "Dell XPS 13")
+    if not templates and " " in product_name.strip():
+        first_token = product_name.strip().split()[0]
+        if len(first_token) > 2:
+            templates = client.execute_kw(
+                "product.template",
+                "search_read",
+                [[("name", "ilike", first_token)]],
+                {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
+            )
+
+    # 3. If still not found, fetch any available product.template
+    if not templates:
+        templates = client.execute_kw(
+            "product.template",
+            "search_read",
+            [[]],
+            {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
+        )
+
+    if not templates:
+        return None, 100.0, product_name
+
+    tmpl = templates[0]
+    tmpl_id = tmpl["id"]
+    price = tmpl.get("list_price") or tmpl.get("standard_price") or 100.0
+    matched_name = tmpl.get("name", product_name)
+
+    # Get product.product id
+    prods = client.execute_kw(
+        "product.product",
+        "search",
+        [[("product_tmpl_id", "=", tmpl_id)]],
+        {"limit": 1},
+    )
+    if prods:
+        return prods[0], price, matched_name
+
+    return None, price, matched_name
+
+
 def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
     """Create a draft Purchase Order on Odoo (purchase.order model). Requires staff approval.
 
@@ -220,46 +271,13 @@ def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
     try:
         client = OdooClient()
 
-        # 1. Find product ID (from product.product or product.template)
-        prod_domain = [("name", "ilike", product_name)]
-        products = client.execute_kw(
-            "product.product",
-            "search_read",
-            [prod_domain],
-            {"fields": ["id", "name", "lst_price", "standard_price"], "limit": 1},
-        )
-
-        if not products:
-            # Fallback search product.template
-            templates = client.execute_kw(
-                "product.template",
-                "search_read",
-                [prod_domain],
-                {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
-            )
-            if not templates:
-                return {
-                    "success": False,
-                    "error": f"Product '{product_name}' not found in Odoo database.",
-                }
-            # Search product.product for this template
-            prod_id = client.execute_kw(
-                "product.product",
-                "search",
-                [[("product_tmpl_id", "=", templates[0]["id"])]],
-                {"limit": 1},
-            )
-            if prod_id:
-                product_id = prod_id[0]
-                price_unit = templates[0].get("standard_price") or templates[0].get("list_price") or 100.0
-            else:
-                return {
-                    "success": False,
-                    "error": f"Product variant for '{product_name}' not found.",
-                }
-        else:
-            product_id = products[0]["id"]
-            price_unit = products[0].get("standard_price") or products[0].get("lst_price") or 100.0
+        # 1. Find product ID
+        product_id, price_unit, matched_name = _find_product_id(client, product_name)
+        if not product_id:
+            return {
+                "success": False,
+                "error": f"Product variant for '{product_name}' not found in Odoo.",
+            }
 
         # 2. Find or create a default Supplier / Vendor partner
         vendor_domain = [("supplier_rank", ">", 0)]
@@ -335,4 +353,90 @@ def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
 
     except Exception as e:
         print(f"[OdooTools Error] create_purchase_order failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def create_sale_order(
+    product_name: str, quantity: int, customer_name: str = ""
+) -> Dict[str, Any]:
+    """Create a draft Sale Order on Odoo (sale.order model) when customer purchases an in-stock product.
+
+    Returns:
+        {"success": True, "order_name": "S00012"} or {"success": False, "error": "..."}
+    """
+    try:
+        client = OdooClient()
+
+        # 1. Find product ID
+        product_id, price_unit, matched_name = _find_product_id(client, product_name)
+        if not product_id:
+            return {
+                "success": False,
+                "error": f"Product variant for '{product_name}' not found in Odoo.",
+            }
+
+        # 2. Find or create Customer partner
+        cust_name = customer_name if customer_name else "Retail Customer"
+        cust_domain = [("name", "ilike", cust_name)]
+        customers = client.execute_kw(
+            "res.partner",
+            "search_read",
+            [cust_domain],
+            {"fields": ["id", "name"], "limit": 1},
+        )
+
+        if customers:
+            customer_id = customers[0]["id"]
+        else:
+            customer_id = client.execute_kw(
+                "res.partner",
+                "create",
+                [{"name": cust_name, "is_company": False}],
+            )
+
+        # 3. Create sale.order in draft state
+        so_id = client.execute_kw(
+            "sale.order",
+            "create",
+            [
+                {
+                    "partner_id": customer_id,
+                    "state": "draft",
+                }
+            ],
+        )
+
+        so_data = client.execute_kw(
+            "sale.order",
+            "read",
+            [[so_id]],
+            {"fields": ["name"]},
+        )
+        order_name = so_data[0]["name"] if so_data else f"SO-{so_id}"
+
+        # 4. Create sale.order.line
+        client.execute_kw(
+            "sale.order.line",
+            "create",
+            [
+                {
+                    "order_id": so_id,
+                    "product_id": product_id,
+                    "name": f"Sale order: {product_name}",
+                    "product_uom_qty": float(quantity),
+                    "price_unit": float(price_unit),
+                }
+            ],
+        )
+
+        return {
+            "success": True,
+            "order_name": order_name,
+            "so_id": so_id,
+            "product_name": product_name,
+            "quantity": quantity,
+        }
+
+    except Exception as e:
+        print(f"[OdooTools Error] create_sale_order failed: {e}")
         return {"success": False, "error": str(e)}

@@ -11,9 +11,12 @@ class ChatState(TypedDict):
     product_names: List[str]  # Product names mentioned by user
     quantity: Optional[int]  # Quantity if stated by user
 
-    # Inventory check
+    # Inventory check & Restock signals
     stock_status: str  # in_stock / out_of_stock / unknown
     out_of_stock_product: str  # Product out of stock (if any)
+    needs_restock_signal: bool  # Signal from SaleAgent to ProcurementAgent
+    restock_po_created: Optional[str]  # Draft Purchase Order code if created by ProcurementAgent
+    sale_order_created: Optional[str]  # Draft Sale Order code if created for customer
 
     # Response
     response: str  # Bot final response
