@@ -88,12 +88,13 @@ def restock_node(state: ChatState) -> Dict[str, Any]:
     result = agent.run(state)
     latency_ms = int((time.time() - start_t) * 1000)
 
-    # Append Procurement Agent's status update to state response
+    # Keep clean customer-facing response from SaleAgent
     current_resp = state.get("response", "")
     proc_resp = result.get("response", "")
 
-    if current_resp and proc_resp:
-        combined_response = f"{current_resp}\n\n---\n{proc_resp}"
+    if state.get("needs_restock_signal"):
+        # Internal handoff from SaleAgent -> ProcurementAgent runs silently for customer
+        combined_response = current_resp
     else:
         combined_response = proc_resp or current_resp
 

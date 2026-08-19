@@ -66,10 +66,22 @@ class ProductAdvisorAgent:
             prod_name = inv_items[0].get("product_name") or inv_items[0].get("name", target_product)
 
             if available_qty < qty:
-                # Out of stock or insufficient stock -> Notify customer & Signal Procurement
+                price_val = inv_items[0].get("list_price") or inv_items[0].get("price", 0.0)
+                cat_name = inv_items[0].get("category") or "Sản phẩm ERP"
+                desc_val = inv_items[0].get("description") or "N/A"
+
                 response = (
-                    f"❌ **{prod_name}**: Rất tiếc sản phẩm hiện chỉ còn {int(available_qty)} cái (không đủ {qty} cái bạn cần).\n\n"
-                    f"📢 *Tôi (Sale Agent) đã tự động gửi thông báo nhu cầu Restock sản phẩm này tới Bộ phận Mua hàng & Quản lý Kho (Procurement Agent) để tạo đơn nhập kho từ Nhà cung cấp.*"
+                    f"Kính chào Quý khách,\n\n"
+                    f"Cảm ơn Quý khách đã quan tâm đến sản phẩm của chúng tôi. Dưới đây là thông tin chi tiết về sản phẩm **{prod_name}** theo hệ thống của chúng tôi:\n\n"
+                    f"- **Tên sản phẩm**: {prod_name}\n"
+                    f"- **Danh mục**: {cat_name}\n"
+                    f"- **Giá bán**: {price_val:,.0f} VNĐ\n"
+                    f"- **Số lượng tồn kho**: 0 sản phẩm (Hết hàng)\n"
+                    f"- **Mô tả**: {desc_val}\n\n"
+                    f"⚠️ **Lưu ý về tình trạng hàng hóa**: Rất tiếc, sản phẩm **{prod_name}** hiện tại đang tạm hết hàng trong kho. Tuy nhiên, Quý khách hoàn toàn yên tâm vì hệ thống ERP của chúng tôi đã tự động gửi thông báo đến **Bộ phận Mua hàng (Procurement Department)** để tiến hành làm thủ tục nhập bổ sung sản phẩm trong thời gian sớm nhất.\n\n"
+                    f"Ngay khi hàng về kho, chúng tôi sẽ liên hệ lại để hỗ trợ Quý khách hoàn tất đơn hàng. Nếu Quý khách cần tư vấn thêm thông tin hoặc tham khảo các mẫu sản phẩm khác, xin vui lòng phản hồi lại tin nhắn này nhé!\n\n"
+                    f"Trân trọng,\n"
+                    f"**Đội ngũ Tư vấn Bán hàng ERP**"
                 )
                 return {
                     "response": response,
