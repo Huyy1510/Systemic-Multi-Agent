@@ -31,13 +31,10 @@ class ProductAdvisorAgent:
         product_names = state.get("product_names", [])
         quantity = state.get("quantity")
 
-        lower_msg = current_msg.lower()
-        # Trigger customer sale order if intent is customer_buy or message contains buying phrases
-        buying_keywords = ["mua", "đặt", "lấy", "cho tôi", "cho em", "chốt", "buy", "order"]
-        if intent == "customer_buy" or any(k in lower_msg for k in buying_keywords):
+        # Pure LLM Intent Routing (Zero Hardcoding)
+        if intent == "customer_buy":
             return self._handle_customer_sale_order(current_msg, product_names, quantity)
-
-        if intent == "product_comparison":
+        elif intent == "product_comparison":
             return self._handle_comparison(current_msg, product_names)
         else:
             return self._handle_inquiry(current_msg, product_names)
