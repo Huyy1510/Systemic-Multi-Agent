@@ -31,17 +31,16 @@ class ProductAdvisorAgent:
         product_names = state.get("product_names", [])
         quantity = state.get("quantity")
 
-        # Check if user wants to place a customer Sale Order (buy)
         lower_msg = current_msg.lower()
-        if any(k in lower_msg for k in ["mua", "đặt mua", "lấy", "chốt đơn", "buy"]):
+        # Trigger customer sale order if intent is customer_buy or message contains buying phrases
+        buying_keywords = ["mua", "đặt", "lấy", "cho tôi", "cho em", "chốt", "buy", "order"]
+        if intent == "customer_buy" or any(k in lower_msg for k in buying_keywords):
             return self._handle_customer_sale_order(current_msg, product_names, quantity)
 
         if intent == "product_comparison":
-            response = self._handle_comparison(current_msg, product_names)
-            return {"response": response, "needs_restock_signal": False}
+            return self._handle_comparison(current_msg, product_names)
         else:
-            response = self._handle_inquiry(current_msg, product_names)
-            return {"response": response, "needs_restock_signal": False}
+            return self._handle_inquiry(current_msg, product_names)
 
     def _handle_customer_sale_order(
         self, current_msg: str, product_names: List[str], quantity: Optional[int]
@@ -57,15 +56,23 @@ class ProductAdvisorAgent:
         except Exception:
             inv_items = []
 
-        if inv_items and "qty_available" in inv_items[0]:
+        if not inv_items or "error" in inv_items[0]:
+            # Fallback search product catalog
+            prod_json = query_products(search_term=target_product, limit=1)
+            try:
+                inv_items = json.loads(prod_json)
+            except Exception:
+                inv_items = []
+
+        if inv_items and isinstance(inv_items, list) and "qty_available" in inv_items[0]:
             available_qty = inv_items[0]["qty_available"]
-            prod_name = inv_items[0].get("product_name", target_product)
+            prod_name = inv_items[0].get("product_name") or inv_items[0].get("name", target_product)
 
             if available_qty < qty:
                 # Out of stock or insufficient stock -> Notify customer & Signal Procurement
                 response = (
                     f"❌ **{prod_name}**: Rất tiếc sản phẩm hiện chỉ còn {int(available_qty)} cái (không đủ {qty} cái bạn cần).\n\n"
-                    f"📢 *Tôi (Sale Agent) đã gửi thông báo yêu cầu Restock hàng tới Bộ phận Mua hàng (Procurement Agent) để lên đơn nhập kho từ Nhà cung cấp.*"
+                    f"📢 *Tôi (Sale Agent) đã tự động gửi thông báo nhu cầu Restock sản phẩm này tới Bộ phận Mua hàng & Quản lý Kho (Procurement Agent) để tạo đơn nhập kho từ Nhà cung cấp.*"
                 )
                 return {
                     "response": response,
@@ -94,7 +101,7 @@ class ProductAdvisorAgent:
                     f"- **Số lượng mua**: {qty} cái\n"
                     f"- **Mã đơn hàng Odoo**: `{so_code}`\n"
                     f"- **Trạng thái**: ⏳ **Bản thảo (Chờ nhân viên duyệt xuất kho)**\n\n"
-                    f"💬 *Đã bắn thông báo nhắc nhở nhân viên Sales trên kênh Slack!*"
+                    f"💬 *Đã bắn thông báo nhắc nhở nhân viên Sales trên kênh Slack!*\n\n"
                     f"ℹ️ *Đơn hàng bán đã được lưu trên Odoo tại menu `Sales -> Orders`. Nhân viên bán hàng chỉ cần kiểm tra và bấm 'Confirm Order' để xuất kho cho bạn.*"
                 )
                 return {
@@ -116,10 +123,22 @@ class ProductAdvisorAgent:
             "needs_restock_signal": False,
         }
 
-    def _handle_inquiry(self, current_msg: str, product_names: List[str]) -> str:
+    def _handle_inquiry(self, current_msg: str, product_names: List[str]) -> Dict[str, Any]:
         """Query Odoo for product recommendations and build natural language response."""
         search_term = product_names[0] if product_names else ""
         raw_products = query_products(search_term=search_term, limit=10)
+
+        # Check if any product is out of stock
+        out_of_stock_prod = None
+        try:
+            p_list = json.loads(raw_products)
+            if isinstance(p_list, list):
+                for p in p_list:
+                    if p.get("qty_available", 1) == 0:
+                        out_of_stock_prod = p.get("name") or search_term
+                        break
+        except Exception:
+            pass
 
         prompt = f"""You are a professional, helpful ERP Sales Consultant (Sale Agent).
 Answer the customer's inquiry based strictly on our internal Odoo ERP product catalog below.
@@ -137,12 +156,22 @@ Odoo Product Catalog Data:
 """
         try:
             res = self.llm.invoke(prompt)
-            return clean_llm_text(res.content)
+            clean_resp = clean_llm_text(res.content)
         except Exception as e:
             print(f"[ProductAdvisor Error] Inquiry LLM failed: {e}")
-            return f"Dạ, đây là danh sách sản phẩm từ hệ thống Odoo ERP:\n```json\n{raw_products}\n```"
+            clean_resp = f"Dạ, đây là danh sách sản phẩm từ hệ thống Odoo ERP:\n```json\n{raw_products}\n```"
 
-    def _handle_comparison(self, current_msg: str, product_names: List[str]) -> str:
+        if out_of_stock_prod:
+            return {
+                "response": clean_resp,
+                "stock_status": "out_of_stock",
+                "out_of_stock_product": out_of_stock_prod,
+                "needs_restock_signal": True,
+            }
+
+        return {"response": clean_resp, "needs_restock_signal": False}
+
+    def _handle_comparison(self, current_msg: str, product_names: List[str]) -> Dict[str, Any]:
         """Query Odoo for 2+ products and build a structured Markdown comparison table."""
         product_datas = []
         if product_names:
@@ -183,7 +212,9 @@ Odoo Product Data:
 """
         try:
             res = self.llm.invoke(prompt)
-            return clean_llm_text(res.content)
+            clean_resp = clean_llm_text(res.content)
         except Exception as e:
             print(f"[ProductAdvisor Error] Comparison LLM failed: {e}")
-            return f"Bảng so sánh sản phẩm Odoo ERP:\n```json\n{catalog_str}\n```"
+            clean_resp = f"Bảng so sánh sản phẩm Odoo ERP:\n```json\n{catalog_str}\n```"
+
+        return {"response": clean_resp, "needs_restock_signal": False}
