@@ -15,10 +15,11 @@ class RouterOutput(BaseModel):
     intent: str = Field(
         description=(
             "Exact intent classification: "
-            "'product_inquiry' (asking for product advice, recommendations, prices), "
+            "'customer_buy' (customer wanting to buy/order a product for themselves, e.g. 'Tôi muốn mua 2 cái Dell XPS', 'Bán cho tôi 1 iPhone'), "
+            "'product_inquiry' (asking for product advice, recommendations, prices, specs), "
             "'product_comparison' (comparing 2 or more products), "
             "'stock_check' (asking if a specific product is in stock / inventory levels), "
-            "'restock_request' (requesting to order/buy/restock products, e.g. 'đặt 30 cái', 'tạo đơn nhập hàng'), "
+            "'restock_request' (explicit request to restock/import inventory from vendors, e.g. 'tạo đơn nhập hàng 50 cái', 'nhập thêm kho'), "
             "or 'off_topic' (general chitchat, weather, coding questions unrelated to products/orders)"
         )
     )
@@ -28,7 +29,7 @@ class RouterOutput(BaseModel):
     )
     quantity: Optional[int] = Field(
         default=None,
-        description="Quantity stated by user if requesting purchase/restock (e.g. 30 for 'đặt 30 cái')",
+        description="Quantity stated by user if requesting purchase/restock (e.g. 2 for 'mua 2 cái')",
     )
     reasoning: str = Field(description="Brief explanation of the classification decision")
 
@@ -57,10 +58,11 @@ class RouterAgent:
 Analyze the current user message along with recent conversation history and classify the user's intent.
 
 Intent categories:
+- "customer_buy": Customer wants to buy/order a product for themselves (e.g. "Tôi muốn mua 2 cái Dell XPS", "Cho tôi đặt 1 cái iPhone", "Mua 2 cái").
 - "product_inquiry": User asking for product recommendations, prices, features, or browsing laptops/tech hardware.
 - "product_comparison": User asking to compare 2 or more specific products (e.g. "So sánh Dell XPS 13 và MacBook Air").
 - "stock_check": User asking if a specific product is available/in stock (e.g. "Còn ThinkPad X1 không?").
-- "restock_request": User requesting to place a restock order, purchase, or order units (e.g. "Đặt 30 cái", "Ừ tạo đơn đi", "Tạo yêu cầu nhập 50 Dell XPS").
+- "restock_request": User/staff explicitly requesting to restock inventory from suppliers (e.g. "Tạo đơn nhập hàng 50 cái", "Nhập thêm ThinkPad vào kho").
 - "off_topic": User asking about weather, sports, politics, math, or anything unrelated to our hardware products & orders.
 
 Recent Chat History:
@@ -68,7 +70,7 @@ Recent Chat History:
 
 Current User Message: "{current_msg}"
 
-Determine the exact intent, extract any product names mentioned, and extract numeric quantity if user requests restock/ordering.
+Determine the exact intent, extract any product names mentioned, and extract numeric quantity if user requests purchase/restock.
 """
 
         try:
@@ -84,8 +86,10 @@ Determine the exact intent, extract any product names mentioned, and extract num
             print(f"[RouterAgent Error] Structured output failed: {e}")
             # Fallback heuristic logic
             lower_msg = current_msg.lower()
-            if any(k in lower_msg for k in ["đặt", "nhập", "order", "buy", "purchase", "cái"]):
+            if any(k in lower_msg for k in ["tạo đơn nhập", "nhập hàng", "nhập kho"]):
                 intent = "restock_request"
+            elif any(k in lower_msg for k in ["mua", "đặt mua", "bán cho tôi", "lấy"]):
+                intent = "customer_buy"
             elif any(k in lower_msg for k in ["so sánh", "compare", "vs", "khác gì"]):
                 intent = "product_comparison"
             elif any(k in lower_msg for k in ["còn", "stock", "tồn kho", "hết hàng"]):

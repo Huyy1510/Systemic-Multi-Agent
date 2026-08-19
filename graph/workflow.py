@@ -138,7 +138,7 @@ def guardrail_node(state: ChatState) -> Dict[str, Any]:
 def route_intent(state: ChatState) -> str:
     """Conditional edge router based on intent classification."""
     intent = state.get("intent", "off_topic")
-    if intent in ("product_inquiry", "product_comparison"):
+    if intent in ("customer_buy", "product_inquiry", "product_comparison"):
         return "product_advisor"
     elif intent == "stock_check":
         return "inventory_checker"
