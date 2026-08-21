@@ -23,7 +23,20 @@ class RouterOutput(BaseModel):
     )
     product_names: List[str] = Field(
         default_factory=list,
-        description="List of product names mentioned in the user message or conversation context",
+        description="List of raw product names mentioned in the user message or conversation context (e.g. ['ghế văn phòng'])",
+    )
+    search_keywords: List[str] = Field(
+        default_factory=list,
+        description=(
+            "English search keywords semantically mapped to standard Odoo product catalog items for database query. "
+            "Examples:\n"
+            "- 'ghế văn phòng' -> ['Office Chair', 'Chair']\n"
+            "- 'bàn làm việc' / 'bàn lớn' -> ['Large Desk', 'Desk']\n"
+            "- 'tủ đen' -> ['Drawer Black', 'Cabinet']\n"
+            "- 'máy tính Dell' -> ['Dell XPS 13', 'Dell']\n"
+            "- 'điện thoại iPhone' -> ['iPhone 15 Pro Max', 'iPhone']\n"
+            "- 'điện thoại Samsung' -> ['Samsung Galaxy S24 Ultra', 'Galaxy']"
+        ),
     )
     quantity: Optional[int] = Field(
         default=None,
@@ -52,20 +65,23 @@ class RouterAgent:
             [f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in chat_history]
         )
 
-        prompt = f"""You are an intelligent Intent Classifier for an ERP Sales Chatbot.
-Analyze the user's input in ANY language and classify the intent into exactly one of:
-- "customer_buy": User expresses any request to buy, order, get, take, or purchase items (e.g., "Cho tôi 1 cái Large Desk", "Tôi muốn mua 2 XPS", "I'd like 1 MacBook").
-- "product_inquiry": User asks about product recommendations, specs, pricing, or catalog browsing.
-- "product_comparison": User asks to compare two or more products.
-- "stock_check": User asks strictly whether a product is currently in stock / available in inventory.
-- "off_topic": Unrelated chitchat, weather, math, code questions.
+        prompt = f"""You are an intelligent Intent Classifier and Semantic Product Entity Mapper for an ERP Sales Chatbot.
+Analyze the user's input in ANY language and:
+1. Classify intent:
+   - "customer_buy": User expresses any request to buy, order, get, take, or purchase items (e.g. "Cho tôi 1 cái ghế văn phòng", "Tôi muốn mua 2 XPS", "I'd like 1 Desk").
+   - "product_inquiry": User asks about product recommendations, specs, pricing, or catalog browsing.
+   - "product_comparison": User asks to compare two or more products.
+   - "stock_check": User asks strictly whether a product is currently in stock / available in inventory.
+   - "off_topic": Unrelated chitchat, weather, math, code questions.
+2. Extract product names in raw user language.
+3. Map Vietnamese or natural language product descriptions to English Odoo ERP search keywords (e.g. "ghế văn phòng" -> ["Office Chair", "Chair"], "bàn lớn" -> ["Large Desk", "Desk"]).
 
 Recent Chat History:
 {history_str if history_str else "(No previous history)"}
 
 Current User Input: "{current_msg}"
 
-Output the structured intent classification, extracted product names, and numeric quantity.
+Output the structured intent classification, raw product names, mapped English search keywords, and numeric quantity.
 """
 
         try:
@@ -75,6 +91,7 @@ Output the structured intent classification, extracted product names, and numeri
             return {
                 "intent": result.intent,
                 "product_names": result.product_names,
+                "search_keywords": result.search_keywords,
                 "quantity": result.quantity,
             }
         except Exception as e:
@@ -82,6 +99,7 @@ Output the structured intent classification, extracted product names, and numeri
             return {
                 "intent": "product_inquiry",
                 "product_names": [],
+                "search_keywords": [],
                 "quantity": None,
                 "warnings": state.get("warnings", []) + [f"Router LLM fallback used: {e}"],
             }

@@ -29,25 +29,30 @@ class ProductAdvisorAgent:
         intent = state.get("intent", "product_inquiry")
         current_msg = state.get("current_message", "")
         product_names = state.get("product_names", [])
+        search_keywords = state.get("search_keywords", [])
         quantity = state.get("quantity")
 
         # Pure LLM Intent Routing (Zero Hardcoding)
         if intent == "customer_buy":
-            return self._handle_customer_sale_order(current_msg, product_names, quantity)
+            return self._handle_customer_sale_order(current_msg, product_names, quantity, search_keywords)
         elif intent == "product_comparison":
-            return self._handle_comparison(current_msg, product_names)
+            return self._handle_comparison(current_msg, product_names, search_keywords)
         else:
-            return self._handle_inquiry(current_msg, product_names)
+            return self._handle_inquiry(current_msg, product_names, search_keywords)
 
     def _handle_customer_sale_order(
-        self, current_msg: str, product_names: List[str], quantity: Optional[int]
+        self,
+        current_msg: str,
+        product_names: List[str],
+        quantity: Optional[int],
+        search_keywords: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Process customer order request via Prompt-Engineered LLM response."""
         target_product = product_names[0] if product_names else current_msg
         qty = quantity if (quantity and quantity > 0) else 1
 
-        # Check inventory first
-        inv_json = query_inventory(product_name=target_product, limit=1)
+        # Check inventory first with search_keywords
+        inv_json = query_inventory(product_name=target_product, limit=1, search_keywords=search_keywords)
         try:
             inv_items = json.loads(inv_json)
         except Exception:
@@ -55,7 +60,7 @@ class ProductAdvisorAgent:
 
         if not inv_items or "error" in inv_items[0]:
             # Fallback search product catalog
-            prod_json = query_products(search_term=target_product, limit=1)
+            prod_json = query_products(search_term=target_product, limit=1, search_keywords=search_keywords)
             try:
                 inv_items = json.loads(prod_json)
             except Exception:
@@ -103,7 +108,12 @@ Customer Message: "{current_msg}"
                 }
 
             # Case B: In Stock -> Create Draft Sale Order + LLM Prompt for Natural Closing Response
-            so_res = create_sale_order(product_name=prod_name, quantity=qty, customer_name="Khách Hàng Retail")
+            so_res = create_sale_order(
+                product_name=prod_name,
+                quantity=qty,
+                customer_name="Khách Hàng Retail",
+                search_keywords=search_keywords,
+            )
             if so_res.get("success"):
                 so_code = so_res.get("order_name", "SO-DRAFT")
 
@@ -159,10 +169,17 @@ Customer Message: "{current_msg}"
             "needs_restock_signal": False,
         }
 
-    def _handle_inquiry(self, current_msg: str, product_names: List[str]) -> Dict[str, Any]:
+    def _handle_inquiry(
+        self,
+        current_msg: str,
+        product_names: List[str],
+        search_keywords: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """Query Odoo for product recommendations and build natural language response via LLM."""
         search_term = product_names[0] if product_names else ""
-        raw_products = query_products(search_term=search_term, limit=10)
+        raw_products = query_products(
+            search_term=search_term, limit=10, search_keywords=search_keywords
+        )
 
         out_of_stock_prod = None
         try:

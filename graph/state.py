@@ -7,8 +7,9 @@ class ChatState(TypedDict):
     chat_history: List[Dict[str, str]]  # [{"role": "user"/"assistant", "content": "..."}]
 
     # Router output
-    intent: str  # product_inquiry / product_comparison / stock_check / restock_request / off_topic
-    product_names: List[str]  # Product names mentioned by user
+    intent: str  # customer_buy / product_inquiry / product_comparison / stock_check / restock_request / off_topic
+    product_names: List[str]  # Product names mentioned by user (raw)
+    search_keywords: List[str]  # English search keywords mapped for Odoo DB query
     quantity: Optional[int]  # Quantity if stated by user
 
     # Inventory check & Restock signals

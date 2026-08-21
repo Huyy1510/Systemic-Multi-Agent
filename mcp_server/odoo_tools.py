@@ -73,28 +73,42 @@ def query_products(
     price_min: Optional[float] = None,
     price_max: Optional[float] = None,
     limit: int = 10,
+    search_keywords: Optional[List[str]] = None,
 ) -> str:
-    """Query product catalog from Odoo product.template model."""
+    """Query Odoo product catalog (product.template) with optional filter criteria and candidate search_keywords."""
     try:
         client = OdooClient()
-        domain: list = [("sale_ok", "=", True)]
-
+        terms_to_try = []
         if search_term:
-            domain.append(("name", "ilike", search_term))
-        if category:
-            domain.append(("categ_id.name", "ilike", category))
-        if price_min is not None:
-            domain.append(("list_price", ">=", price_min))
-        if price_max is not None:
-            domain.append(("list_price", "<=", price_max))
+            terms_to_try.append(search_term)
+        if search_keywords:
+            for kw in search_keywords:
+                if kw and kw not in terms_to_try:
+                    terms_to_try.append(kw)
+        if not terms_to_try:
+            terms_to_try = [""]
 
-        fields = ["id", "name", "list_price", "qty_available", "description_sale", "categ_id"]
-        products = client.execute_kw(
-            "product.template",
-            "search_read",
-            [domain],
-            {"fields": fields, "limit": limit},
-        )
+        products = []
+        for term in terms_to_try:
+            domain: list = [("sale_ok", "=", True)]
+            if term:
+                domain.append(("name", "ilike", term.strip()))
+            if category:
+                domain.append(("categ_id.name", "ilike", category))
+            if price_min is not None:
+                domain.append(("list_price", ">=", price_min))
+            if price_max is not None:
+                domain.append(("list_price", "<=", price_max))
+
+            fields = ["id", "name", "list_price", "qty_available", "description_sale", "categ_id"]
+            products = client.execute_kw(
+                "product.template",
+                "search_read",
+                [domain],
+                {"fields": fields, "limit": limit},
+            )
+            if products:
+                break
 
         results = []
         for p in products:
@@ -115,21 +129,37 @@ def query_products(
         return json.dumps([{"error": str(e)}], ensure_ascii=False)
 
 
-def query_inventory(product_name: str = "", limit: int = 10) -> str:
-    """Query inventory stock level for a specific product name or overall stock."""
+def query_inventory(
+    product_name: str = "", limit: int = 10, search_keywords: Optional[List[str]] = None
+) -> str:
+    """Query inventory stock level for a specific product name or candidate search_keywords."""
     try:
         client = OdooClient()
-        domain: list = [("sale_ok", "=", True)]
+        terms_to_try = []
         if product_name:
-            domain.append(("name", "ilike", product_name))
+            terms_to_try.append(product_name)
+        if search_keywords:
+            for kw in search_keywords:
+                if kw and kw not in terms_to_try:
+                    terms_to_try.append(kw)
+        if not terms_to_try:
+            terms_to_try = [""]
 
-        fields = ["id", "name", "qty_available", "virtual_available", "list_price"]
-        products = client.execute_kw(
-            "product.template",
-            "search_read",
-            [domain],
-            {"fields": fields, "limit": limit},
-        )
+        products = []
+        for term in terms_to_try:
+            domain: list = [("sale_ok", "=", True)]
+            if term:
+                domain.append(("name", "ilike", term.strip()))
+
+            fields = ["id", "name", "qty_available", "virtual_available", "list_price"]
+            products = client.execute_kw(
+                "product.template",
+                "search_read",
+                [domain],
+                {"fields": fields, "limit": limit},
+            )
+            if products:
+                break
 
         results = []
         for p in products:
@@ -211,28 +241,47 @@ def query_sales(limit: int = 10) -> str:
         return json.dumps([{"error": str(e)}], ensure_ascii=False)
 
 
-def _find_product_id(client: OdooClient, product_name: str):
-    """Robust product lookup searching product.template and product.product across full string and tokens."""
-    # 1. Try full name search on product.template
-    templates = client.execute_kw(
-        "product.template",
-        "search_read",
-        [[("name", "ilike", product_name)]],
-        {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
-    )
+def _find_product_id(
+    client: OdooClient, product_name: str, search_keywords: Optional[List[str]] = None
+):
+    """Robust product lookup searching candidate terms across search_keywords, full string, and tokens."""
+    candidates = []
+    if search_keywords:
+        for kw in search_keywords:
+            if kw and kw not in candidates:
+                candidates.append(kw)
+    if product_name and product_name not in candidates:
+        candidates.append(product_name)
 
-    # 2. If not found, try first token (e.g. "Dell" from "Dell XPS 13")
-    if not templates and " " in product_name.strip():
-        first_token = product_name.strip().split()[0]
-        if len(first_token) > 2:
-            templates = client.execute_kw(
-                "product.template",
-                "search_read",
-                [[("name", "ilike", first_token)]],
-                {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
-            )
+    templates = []
+    for term in candidates:
+        if not term or not term.strip():
+            continue
+        templates = client.execute_kw(
+            "product.template",
+            "search_read",
+            [[("name", "ilike", term.strip())]],
+            {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
+        )
+        if templates:
+            break
 
-    # 3. If still not found, fetch any available product.template
+    # If not found, try first token of each candidate
+    if not templates:
+        for term in candidates:
+            if " " in term.strip():
+                first_token = term.strip().split()[0]
+                if len(first_token) > 2:
+                    templates = client.execute_kw(
+                        "product.template",
+                        "search_read",
+                        [[("name", "ilike", first_token)]],
+                        {"fields": ["id", "name", "list_price", "standard_price"], "limit": 1},
+                    )
+                    if templates:
+                        break
+
+    # If still not found, fetch any available product.template
     if not templates:
         templates = client.execute_kw(
             "product.template",
@@ -262,7 +311,9 @@ def _find_product_id(client: OdooClient, product_name: str):
     return None, price, matched_name
 
 
-def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
+def create_purchase_order(
+    product_name: str, quantity: int, search_keywords: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """Create a draft Purchase Order on Odoo (purchase.order model). Requires staff approval.
 
     Returns:
@@ -272,7 +323,9 @@ def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
         client = OdooClient()
 
         # 1. Find product ID
-        product_id, price_unit, matched_name = _find_product_id(client, product_name)
+        product_id, price_unit, matched_name = _find_product_id(
+            client, product_name, search_keywords=search_keywords
+        )
         if not product_id:
             return {
                 "success": False,
@@ -357,7 +410,10 @@ def create_purchase_order(product_name: str, quantity: int) -> Dict[str, Any]:
 
 
 def create_sale_order(
-    product_name: str, quantity: int, customer_name: str = ""
+    product_name: str,
+    quantity: int,
+    customer_name: str = "",
+    search_keywords: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Create a draft Sale Order on Odoo (sale.order model) when customer purchases an in-stock product.
 
@@ -368,7 +424,9 @@ def create_sale_order(
         client = OdooClient()
 
         # 1. Find product ID
-        product_id, price_unit, matched_name = _find_product_id(client, product_name)
+        product_id, price_unit, matched_name = _find_product_id(
+            client, product_name, search_keywords=search_keywords
+        )
         if not product_id:
             return {
                 "success": False,
